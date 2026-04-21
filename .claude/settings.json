@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Write(/Users/marmibas/Desktop/workspace/jinba-db/.env.example)",
+      "Write(/Users/marmibas/Desktop/workspace/jinba-db/.github/**)",
+      "Bash(supabase *)",
+      "Bash(npx supabase *)"
+    ]
+  }
+}

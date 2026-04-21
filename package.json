@@ -1,0 +1,25 @@
+{
+  "name": "jinba-db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Supabase schema, migrations, seeds, and generated types for Jinba",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "db:reset": "supabase db reset",
+    "db:push": "supabase db push",
+    "types:gen": "npx tsx scripts/gen-types.ts",
+    "types:check": "npx tsx scripts/check-types-fresh.ts",
+    "checksums:update": "npx tsx scripts/update-migration-checksums.ts",
+    "lint": "biome lint scripts supabase/functions",
+    "format": "biome format --write scripts supabase/functions"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@supabase/supabase-js": "^2.49.4",
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  }
+}

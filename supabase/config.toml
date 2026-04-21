@@ -1,0 +1,65 @@
+# Supabase CLI project configuration
+# https://supabase.com/docs/guides/local-development/cli/config
+
+project_id = "jinba-db"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+# Matches the linked cloud project (Supabase defaulted to PG 17 in 2026).
+major_version = 17
+
+[db.seed]
+# Supabase CLI default is `supabase/seed.sql`; we keep per-entity files under
+# `supabase/seeds/` and enumerate them here in dependency order.
+enabled = true
+sql_paths = [
+  './seeds/01_sources.sql',
+  './seeds/02_makes.sql',
+  './seeds/03_models.sql',
+  './seeds/04_generations.sql',
+  './seeds/05_trims.sql',
+]
+
+[db.pooler]
+enabled = false
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+# LO3: F1 is read-only public content; auth is deferred to F2 (favoritos,
+# alerts, admin dashboard). Flip to `true` and add `[auth.external.*]` blocks
+# when those features land.
+enabled = false
+
+[edge_runtime]
+enabled = true
+policy = "oneshot"
+inspector_port = 8083
+
+[functions.refresh-price-aggregates]
+verify_jwt = true
+
+[analytics]
+enabled = false

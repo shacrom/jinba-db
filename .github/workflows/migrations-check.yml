@@ -1,0 +1,91 @@
+name: migrations-check
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'types/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'tsconfig.json'
+      - 'biome.json'
+      - '.github/workflows/migrations-check.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # MD9: fetch main so we can diff checksums cross-branch.
+          fetch-depth: 0
+
+      - name: Detect edits to already-merged migrations (MD9)
+        # For every migration filename listed in main's checksums file,
+        # the SHA must match the PR's version. New migrations are OK.
+        run: |
+          git fetch origin main --depth=1 2>/dev/null || true
+          if git show origin/main:supabase/migrations/_checksums.sha256 > /tmp/main-checksums 2>/dev/null; then
+            fail=0
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+              expected=$(echo "$line" | awk '{print $1}')
+              file=$(echo "$line" | awk '{print $2}')
+              path="supabase/migrations/$file"
+              if [ -f "$path" ]; then
+                actual=$(shasum -a 256 "$path" | awk '{print $1}')
+                if [ "$expected" != "$actual" ]; then
+                  echo "::error file=$path::Merged migration was edited. Hash $actual != main $expected. Add a NEW migration instead."
+                  fail=1
+                fi
+              fi
+            done < /tmp/main-checksums
+            [ "$fail" -eq 0 ] || exit 1
+          else
+            echo "No checksums file on main yet — first-merge OK."
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          # Pin to avoid silent flag-semantics drift on CLI upgrades.
+          version: 2.90.0
+
+      - name: Lint with Biome
+        run: npm run lint
+
+      - name: Verify migration immutability (checksums)
+        working-directory: supabase/migrations
+        run: sha256sum -c _checksums.sha256
+
+      - name: Start local Postgres via Supabase
+        run: supabase db start
+
+      - name: Apply migrations + seeds
+        run: supabase db reset
+
+      - name: Assert seeds loaded (smoke test)
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
+            -tA -c "select count(*) from makes;" | grep -qE '^[5-9]$|^[1-9][0-9]+$' \
+            || { echo "::error::makes table has <5 rows — seeds did not load"; exit 1; }
+
+      - name: Check types freshness (drift detection)
+        env:
+          SUPABASE_TYPES_MODE: local
+        run: npm run types:check
+
+      - name: Stop local services
+        if: always()
+        run: supabase stop --no-backup

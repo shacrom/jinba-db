@@ -1,0 +1,57 @@
+name: deploy-staging
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/seeds/**'
+      - 'supabase/functions/**'
+      - '.github/workflows/deploy-staging.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_STAGING_DB_PASSWORD }}
+      STAGING_REF: ${{ secrets.SUPABASE_STAGING_PROJECT_REF }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          # Pinned to match migrations-check.yml (CR2 fix).
+          version: 2.90.0
+
+      - name: Link to staging project
+        run: supabase link --project-ref $STAGING_REF
+
+      - name: Preview pending migration diff (HI6)
+        # Just shows what will be applied — does not fail the build.
+        # For strict pre-push drift detection, compare `supabase migration list`
+        # output between local and linked.
+        run: |
+          echo "== Pending migrations =="
+          supabase migration list --linked || true
+
+      - name: Push migrations to staging
+        run: supabase db push --include-seed
+
+      - name: Smoke test — taxonomy seeded (HI6)
+        # Connect to the staging DB and verify at least 5 makes exist.
+        # Fails the deploy if the push silently skipped seeds.
+        run: |
+          psql "postgresql://postgres.$STAGING_REF:$SUPABASE_DB_PASSWORD@aws-0-eu-central-1.pooler.supabase.com:6543/postgres" \
+            -tA -c "select count(*) from public.makes;" \
+            | grep -qE '^[5-9]$|^[1-9][0-9]+$' \
+            || { echo "::error::makes table has <5 rows in staging"; exit 1; }
+
+      - name: Deploy Edge Functions
+        run: supabase functions deploy refresh-price-aggregates --project-ref $STAGING_REF
